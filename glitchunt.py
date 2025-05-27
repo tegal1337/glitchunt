@@ -11,6 +11,9 @@ from rich.table import Table
 from rich.text import Text
 from pyfiglet import Figlet
 
+EXTERNAL_DOMAINS = ["google.com", "facebook.com", "instagram.com", "youtube.com", "linkedin.com", "twitter.com", "tiktok.com", "github.com", "gitlab.com", "wa.me", "whatsapp.com"]
+
+
 console = Console()
 
 def print_banner():
@@ -23,7 +26,7 @@ def print_banner():
 
     info_panel = Panel.fit(
         "[bold yellow]GlitchHunt[/] helps uncover [cyan]hidden[/], [red]disabled[/], and [magenta]unexpected UI elements[/] in authenticated and unauthenticated web environments.\n"
-        "[green]Supports login session crawling, auto-enable & click actions, and interactive output.[/]\n\n"
+        "[green]Supports login session crawling, auto-enable & click actions (optional), and interactive output.[/]\n\n"
         "[bold]Usage:[/] python3 glitchunt.py --help",
         title="[bold green]About[/]",
         border_style="green"
@@ -52,21 +55,40 @@ def scan_page_for_suspicious_elements(html):
     return suspicious_elements
 
 def enable_and_click_disabled_elements(page):
-    selector = "button[disabled], input[disabled], select[disabled], textarea[disabled]"
+    selector = "button, input, select, textarea, div, a, span"  # Bisa tambah tag lain jika perlu
     elements = page.query_selector_all(selector)
     enabled_elements = []
     for el in elements:
         try:
-            page.evaluate("(el) => el.removeAttribute('disabled')", el)
+            # Ambil semua attribute penting
+            has_disabled = page.evaluate("(el) => el.hasAttribute('disabled')", el)
+            has_hidden_attr = page.evaluate("(el) => el.hasAttribute('hidden')", el)
+            is_display_none = page.evaluate("(el) => getComputedStyle(el).display === 'none'", el)
+            is_visibility_hidden = page.evaluate("(el) => getComputedStyle(el).visibility === 'hidden'", el)
+
+            if has_disabled:
+                page.evaluate("(el) => el.removeAttribute('disabled')", el)
+            if has_hidden_attr:
+                page.evaluate("(el) => el.removeAttribute('hidden')", el)
+            if is_display_none or is_visibility_hidden:
+                page.evaluate("""
+                    (el) => {
+                        el.style.display = 'block';
+                        el.style.visibility = 'visible';
+                        el.style.opacity = '1';
+                    }
+                """, el)
+
             el.click(timeout=5000)
             desc = page.evaluate("(el) => el.outerHTML", el)
             enabled_elements.append(desc)
+
         except Exception as e:
             console.print(f"[red]Failed to enable/click element:[/] {e}")
     return enabled_elements
 
 def print_suspicious_table(elements):
-    table = Table(title="Suspicious UI Elements Found", header_style="bold green")
+    table = Table(title="", header_style="bold green")
     table.add_column("No", justify="right")
     table.add_column("Tag", style="cyan")
     table.add_column("ID", style="magenta")
@@ -77,7 +99,7 @@ def print_suspicious_table(elements):
         table.add_row(str(i), el["tag"], el["id"], el["classes"], str(el["disabled"]), str(el["hidden"]))
     console.print(table)
 
-def scan_single_url(url, show_browser=False, save_log=False, keep_browser=False):
+def scan_single_url(url, show_browser=False, save_log=False, keep_browser=False, auto_enable=False):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=not show_browser)
         context = browser.new_context()
@@ -88,8 +110,10 @@ def scan_single_url(url, show_browser=False, save_log=False, keep_browser=False)
         suspicious_elements = scan_page_for_suspicious_elements(html)
         print_suspicious_table(suspicious_elements)
 
-        enabled_elements = enable_and_click_disabled_elements(page)
-        console.print(f"[green]Auto-enabled and clicked {len(enabled_elements)} disabled elements[/]")
+        enabled_elements = []
+        if auto_enable:
+            enabled_elements = enable_and_click_disabled_elements(page)
+            console.print(f"[green]Auto-enabled and clicked {len(enabled_elements)} disabled elements[/]")
 
         if save_log:
             filename = f"log_{urlparse(url).netloc.replace('.', '_')}.json"
@@ -108,6 +132,29 @@ def scan_single_url(url, show_browser=False, save_log=False, keep_browser=False)
             input()
 
         browser.close()
+        
+def get_computed_hidden_elements(page):
+    script = """
+    () => {
+        const hiddenElems = [];
+        const all = document.querySelectorAll('*');
+        all.forEach(el => {
+            const style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden') {
+                hiddenElems.push({
+                    tag: el.tagName.toLowerCase(),
+                    id: el.id || '',
+                    classes: el.className || '',
+                    disabled: el.disabled || false,
+                    hidden: true
+                });
+            }
+        });
+        return hiddenElems;
+    }
+    """
+    return page.evaluate(script)
+
 
 def manual_login_and_save_state(login_url, show_browser=False):
     with sync_playwright() as p:
@@ -121,7 +168,7 @@ def manual_login_and_save_state(login_url, show_browser=False):
         browser.close()
         console.print("[green]Login state saved to state.json[/]")
 
-def crawl_dashboard_all_links(start_url, show_browser=False, save_log=False, keep_browser=False):
+def crawl_dashboard_all_links(start_url, show_browser=False, save_log=False, keep_browser=False, auto_enable=False):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=not show_browser)
         context = browser.new_context(storage_state="state.json")
@@ -130,10 +177,17 @@ def crawl_dashboard_all_links(start_url, show_browser=False, save_log=False, kee
         visited = set()
         queue = deque([start_url])
         full_log = []
+        domain = urlparse(start_url).netloc
 
         while queue:
             url = queue.popleft()
-            if url in visited:
+            parsed_url = urlparse(url)
+
+            if url in visited or any(domain in url for domain in EXTERNAL_DOMAINS):
+                continue
+            if parsed_url.scheme not in ["http", "https"]:
+                continue
+            if any(url.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".gif", ".svg", ".pdf", ".zip", ".mp4"]):
                 continue
 
             console.print(f"\n[blue]Scanning {url}[/]")
@@ -145,11 +199,17 @@ def crawl_dashboard_all_links(start_url, show_browser=False, save_log=False, kee
                 continue
 
             html = page.content()
-            suspicious_elements = scan_page_for_suspicious_elements(html)
+            suspicious_static = scan_page_for_suspicious_elements(html)
+            suspicious_computed = get_computed_hidden_elements(page)
+
+            combined = {f"{el['tag']}#{el['id']}.{el['classes']}": el for el in suspicious_static + suspicious_computed}
+            suspicious_elements = list(combined.values())
             print_suspicious_table(suspicious_elements)
 
-            enabled_elements = enable_and_click_disabled_elements(page)
-            console.print(f"[green]Auto-enabled and clicked {len(enabled_elements)} disabled elements on {url}[/]")
+            enabled_elements = []
+            if auto_enable:
+                enabled_elements = enable_and_click_disabled_elements(page)
+                console.print(f"[green]Auto-enabled and clicked {len(enabled_elements)} elements on {url}[/]")
 
             full_log.append({
                 "url": url,
@@ -161,16 +221,42 @@ def crawl_dashboard_all_links(start_url, show_browser=False, save_log=False, kee
             visited.add(url)
 
             soup = BeautifulSoup(html, "html.parser")
-            for link in soup.find_all("a", href=True):
-                href = urljoin(url, link['href'])
-                if urlparse(href).netloc == urlparse(start_url).netloc and href not in visited:
+            anchors = soup.find_all("a", href=True)
+            buttons = soup.find_all(["button", "form"])
+            js_links = [el.get("onclick") for el in soup.find_all(attrs={"onclick": True})]
+
+            discovered = set()
+            for tag in anchors:
+                href = urljoin(url, tag['href'])
+                if urlparse(href).netloc == domain:
+                    discovered.add(href)
+            for btn in buttons:
+                action = btn.get("action")
+                if action:
+                    href = urljoin(url, action)
+                    if urlparse(href).netloc == domain:
+                        discovered.add(href)
+            for js in js_links:
+                if js and "location.href=" in js:
+                    try:
+                        href = js.split("location.href=")[1].split(";")[0].strip("'\" ")
+                        full = urljoin(url, href)
+                        if urlparse(full).netloc == domain:
+                            discovered.add(full)
+                    except:
+                        pass
+
+            for href in discovered:
+                if href not in visited and href not in queue:
                     queue.append(href)
 
         if save_log:
-            filename = f"dashboard_log_{urlparse(start_url).netloc.replace('.', '_')}.json"
+            filename = f"dashboard_log_{domain.replace('.', '_')}.json"
             with open(filename, "w") as f:
                 json.dump(full_log, f, indent=2)
             console.print(f"[yellow]Saved dashboard crawl log to {filename}[/]")
+
+        console.print(Panel(f"[bold green]Total Pages Scanned:[/] {len(visited)}\n[bold green]Suspicious Hits Logged:[/] {sum(len(x['suspicious_elements']) for x in full_log)}", title="Summary"))
 
         if keep_browser:
             console.print("[bold green]Browser kept open. Press Enter to exit...[/]")
@@ -179,12 +265,12 @@ def crawl_dashboard_all_links(start_url, show_browser=False, save_log=False, kee
         browser.close()
 
 def main():
-    print_banner()  # Banner duluan tampil
+    print_banner()
 
     parser = argparse.ArgumentParser(
-        description="GlitchHunt: Scan and exploit disabled/hidden UI elements with login support.",
+        description="GlitchHunt: Scan and detect disabled/hidden UI elements with optional login & crawling.",
         formatter_class=argparse.RawTextHelpFormatter,
-        add_help=False  # Disable otomatis help supaya bisa custom
+        add_help=False
     )
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument("--single-url", help="Scan a single URL without login")
@@ -193,12 +279,12 @@ def main():
     parser.add_argument("--show-browser", action="store_true", help="Show browser during scan")
     parser.add_argument("--keep-browser", action="store_true", help="Keep browser open after scan")
     parser.add_argument("--save-log", action="store_true", help="Save scan results to JSON log file")
+    parser.add_argument("--auto-enable", action="store_true", help="Automatically enable and click disabled elements")
     parser.add_argument("-h", "--help", action="help", help="Show this help message and exit")
 
     try:
         args = parser.parse_args()
     except SystemExit:
-        # Kalau parsing error, jangan langsung exit, biar banner keliatan
         console.print("\n[red]Error: Arguments are required. Use -h for help.[/red]")
         exit(1)
 
@@ -211,7 +297,8 @@ def main():
             args.single_url,
             show_browser=args.show_browser,
             save_log=args.save_log,
-            keep_browser=args.keep_browser
+            keep_browser=args.keep_browser,
+            auto_enable=args.auto_enable
         )
     elif args.dashboard:
         console.print("[bold]Step 1: Manual Login[/bold]")
@@ -221,7 +308,8 @@ def main():
             args.dashboard,
             show_browser=args.show_browser,
             save_log=args.save_log,
-            keep_browser=args.keep_browser
+            keep_browser=args.keep_browser,
+            auto_enable=args.auto_enable
         )
 
 if __name__ == "__main__":
