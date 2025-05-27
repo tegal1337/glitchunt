@@ -7,9 +7,10 @@ GlitchHunt is a Python-based tool designed to scan web pages for suspicious UI e
 ## Features
 
 - Scan single web pages for disabled or hidden UI elements.
+- Detects attributes like `disabled`, `hidden`, and styles like `display: none` or `visibility: hidden`.
 - Auto-enable and click on disabled buttons or inputs to test for hidden features.
-- Support manual login to access authenticated dashboards.
-- Crawl and scan all links within authenticated dashboards.
+- Supports manual login workflows for scanning authenticated dashboards.
+- Crawls all internal links within the dashboard or single page context.
 - Save scan results and logs in JSON format.
 - User-friendly CLI with optional browser display.
 - Stylish output with tables and ASCII art header.
@@ -40,13 +41,15 @@ python glitchunt.py --single-url https://example.com/page.html --show-browser --
 ### Scan authenticated dashboard (manual login required)
 
 ```bash
-python glitchunt.py --login https://example.com/login --dashboard https://example.com/dashboard --show-browser --save-log
+python glitchunt.py --login https://example.com/login --dashboard https://example.com/dashboard --show-browser --kep-browser --save-log
 ```
 
-- The tool will open the login page in a browser.
-- Perform manual login.
-- Press Enter in the terminal after successful login.
-- The tool saves the login state and crawls the dashboard recursively.
+Steps:
+
+- The browser will open at the login page.
+- You perform the login manually.
+- Once logged in, return to the terminal and press Enter.
+- GlitchHunt will start crawling and scanning the dashboard pages.
 
 ---
 
@@ -60,6 +63,7 @@ python glitchunt.py --login https://example.com/login --dashboard https://exampl
 | `--show-browser`  | Show browser during scan (headless mode off)                |
 | `--keep-browser`  | Keep browser open after scan (for debugging)                |
 | `--save-log`      | Save scan results to JSON log file                           |
+| `--auto-enable`      | Automatically enable and click all disabled elements detected                           |
 
 ---
 
@@ -90,3 +94,41 @@ Scanning single page: https://example.com
 Auto-enabled and clicked 1 disabled elements
 Browser kept open. Press Enter to exit...
 ```
+---
+## Example JSON Output
+
+Here’s what the JSON log looks like when `--save-log` is used:
+```
+{
+  "scanned_url": "https://example.com/page.html",
+  "timestamp": "2025-05-27T15:12:03Z",
+  "hidden_elements": [
+    {
+      "tag": "div",
+      "id": "sidebar-ad",
+      "class": "",
+      "attributes": {
+        "hidden": true
+      },
+      "styles": {
+        "display": "none"
+      },
+      "outerHTML": "<div id=\"sidebar-ad\" style=\"display: none;\">Ad Content</div>"
+    }
+  ],
+  "disabled_elements": [
+    {
+      "tag": "button",
+      "id": "add-acc",
+      "class": "",
+      "attributes": {
+        "disabled": true
+      },
+      "outerHTML": "<button id=\"add-acc\" disabled>Add Account</button>",
+      "click_result": "clicked_successfully"
+    }
+  ]
+}
+```
+## 🤝 Contributing
+We welcome contributions from the community! Feel free to open a pull request or submit an issue if you find bugs or have feature suggestions.
