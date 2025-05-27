@@ -41,7 +41,7 @@ python glitchunt.py --single-url https://example.com/page.html --show-browser --
 ### Scan authenticated dashboard (manual login required)
 
 ```bash
-python glitchunt.py --login https://example.com/login --dashboard https://example.com/dashboard --show-browser --kep-browser --save-log
+python glitchunt.py --login https://example.com/login --dashboard https://example.com/dashboard --show-browser --keep-browser --save-log
 ```
 
 Steps:
