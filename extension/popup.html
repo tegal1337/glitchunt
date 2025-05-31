@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hidden Element Finder</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <div class="logo-icon">🔍</div>
+                <h1 class="title">Hidden Element Finder</h1>
+            </div>
+            <div class="scan-btn" id="scanBtn">
+                <span class="scan-text">SCAN</span>
+                <div class="scan-loader hidden" id="scanLoader"></div>
+            </div>
+        </header>
+
+        <div class="stats" id="stats">
+            <div class="stat-item">
+                <span class="stat-number" id="totalCount">0</span>
+                <span class="stat-label">Elements Found</span>
+            </div>
+        </div>
+
+        <div class="results-container" id="resultsContainer">
+            <div class="no-results" id="noResults">
+                <div class="no-results-icon">👁️</div>
+                <p>Click SCAN to find hidden elements</p>
+            </div>
+
+            <div class="results-content hidden" id="resultsContent">
+                <div class="category-group" id="hiddenAttr">
+                    <div class="category-header" data-category="hidden">
+                        <div class="category-title">Hidden Attribute <span class="category-count">0</span></div>
+                        <div class="category-toggle">▼</div>
+                    </div>
+                    <div class="category-items"></div>
+                </div>
+
+                <div class="category-group" id="displayNone">
+                    <div class="category-header" data-category="display">
+                        <div class="category-title">Display: None <span class="category-count">0</span></div>
+                        <div class="category-toggle">▼</div>
+                    </div>
+                    <div class="category-items"></div>
+                </div>
+
+                <div class="category-group" id="visibilityHidden">
+                    <div class="category-header" data-category="visibility">
+                        <div class="category-title">Visibility: Hidden <span class="category-count">0</span></div>
+                        <div class="category-toggle">▼</div>
+                    </div>
+                    <div class="category-items"></div>
+                </div>
+
+                <div class="category-group" id="opacityZero">
+                    <div class="category-header" data-category="opacity">
+                        <div class="category-title">Opacity: 0 <span class="category-count">0</span></div>
+                        <div class="category-toggle">▼</div>
+                    </div>
+                    <div class="category-items"></div>
+                </div>
+            </div>
+        </div>
+
+        <button id="clearMemoryBtn" class="clear-memory-btn hidden">Clear Memory</button>
+    </div>
+    <script src="popup.js"></script>
+</body>
+
+</html>
